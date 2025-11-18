@@ -279,7 +279,6 @@ def main():
     args = parse_args()
     df = load_data(args.csv)
     outdir = Path(args.outdir)
-    print_highest_average_score(df)
 
     if args.interactive:
         make_interactive_dashboard(df, output_dir=outdir)

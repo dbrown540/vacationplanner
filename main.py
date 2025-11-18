@@ -56,21 +56,6 @@ def load_data(csv_path: str = CSV_PATH) -> pd.DataFrame:
     return df
 
 
-def print_highest_average_score(df: pd.DataFrame) -> None:
-    """Calculate and print the park with the highest average score."""
-    averages = df["AverageScore"]
-    best_idx = averages.idxmax()
-    best_row = df.loc[best_idx]
-    best_avg = averages.loc[best_idx]
-
-    park = best_row["Park"]
-    state = best_row["State"]
-    print(
-        f"Highest average hiking condition: {park} ({state}) with "
-        f"average score {best_avg:.2f}"
-    )
-
-
 def normalize_month_name(month: str) -> str:
     """Return canonical month abbreviation (e.g., 'Jan', 'Feb')."""
     month = month.strip().lower()

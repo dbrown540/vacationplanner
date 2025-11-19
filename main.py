@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate month-by-month US national parks hiking-condition heat maps.
+Generate interactive US national parks hiking-condition heat map dashboard.
 
 Inputs:
     - national_parks_hiking_conditions.csv
@@ -9,20 +9,12 @@ Inputs:
         Latitude, Longitude
 
 Usage:
-    # Single month
-    python parks_hiking_heatmaps.py --month Apr
-
-    # All months
-    python parks_hiking_heatmaps.py --all
-
-    # Interactive dashboard
-    python parks_hiking_heatmaps.py --interactive
+    python parks_hiking_heatmaps.py
 
 Output:
-    - HTML files (interactive) saved in ./output_maps/
-      Example: hiking_conditions_Apr.html
-        - Interactive dashboard includes month selector with an Average tab.
-        - Console message includes the park with the highest average score.
+    - HTML file (interactive) saved in ./output_maps/hiking_conditions_interactive.html
+    - Interactive dashboard includes month selector with an Average tab.
+    - Console message includes all parks sorted by average score.
 """
 
 import argparse
@@ -30,7 +22,6 @@ from copy import deepcopy
 from pathlib import Path
 
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 
 CSV_PATH = "data/national_parks_hiking_conditions.csv"
@@ -69,93 +60,16 @@ def print_average_scores(df: pd.DataFrame) -> None:
         print(f"{rank:>2}. {park} ({state}) – {avg:.2f}")
 
 
-def normalize_month_name(month: str) -> str:
-    """Return canonical month abbreviation (e.g., 'Jan', 'Feb')."""
-    month = month.strip().lower()
-
-    mapping = {
-        "january": "Jan", "jan": "Jan",
-        "february": "Feb", "feb": "Feb",
-        "march": "Mar", "mar": "Mar",
-        "april": "Apr", "apr": "Apr",
-        "may": "May",
-        "june": "Jun", "jun": "Jun",
-        "july": "Jul", "jul": "Jul",
-        "august": "Aug", "aug": "Aug",
-        "september": "Sep", "sep": "Sep",
-        "october": "Oct", "oct": "Oct",
-        "november": "Nov", "nov": "Nov",
-        "december": "Dec", "dec": "Dec",
-    }
-
-    if month not in mapping:
-        raise ValueError(
-            f"Unrecognized month '{month}'. "
-            f"Use one of: {', '.join(sorted(set(mapping.values())))}"
-        )
-
-    return mapping[month]
-
-
-def make_month_heatmap(df: pd.DataFrame, month_col: str, output_dir: Path = OUTPUT_DIR):
-    """
-    Create an interactive heat map for a single month.
-
-    - Colors: hiking condition score (e.g., 1–10)
-    - Scope: USA
-    """
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    title = f"US National Parks Hiking Conditions – {month_col}"
-    fig = px.scatter_geo(
-        df,
-        lat="Latitude",
-        lon="Longitude",
-        color=month_col,
-        hover_name="Park",
-        hover_data={
-            "State": True,
-            month_col: True,
-            "Latitude": False,
-            "Longitude": False,
-        },
-        color_continuous_scale="Viridis",
-        range_color=(df[month_col].min(), df[month_col].max()),
-        projection="albers usa",
-        scope="usa",
-        title=title,
-    )
-
-    fig.update_traces(marker=dict(size=8))  # tweak point size if you like
-    fig.update_layout(
-        legend_title_text="Hiking Condition Score",
-        coloraxis_colorbar={
-            "title": "Condition",
-            "ticks": "outside",
-        },
-        margin=dict(l=20, r=20, t=60, b=20),
-    )
-
-    output_path = output_dir / f"hiking_conditions_{month_col}.html"
-    fig.write_html(str(output_path), include_plotlyjs="cdn")
-
-    print(f"Saved: {output_path}")
-
-
-def generate_all_months(df: pd.DataFrame, output_dir: Path = OUTPUT_DIR):
-    """Generate heat maps for all 12 months."""
-    for month_col in MONTH_COLUMNS:
-        print(f"Generating map for {month_col}...")
-        make_month_heatmap(df, month_col, output_dir=output_dir)
-
-
 def make_interactive_dashboard(df: pd.DataFrame, output_dir: Path = OUTPUT_DIR):
-    """Create a single HTML file with buttons to toggle between months."""
+    """Create a single HTML file with buttons to toggle between months and rating filter."""
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / "hiking_conditions_interactive.html"
 
     overall_min = min(df[MONTH_COLUMNS].min().min(), df["AverageScore"].min())
     overall_max = max(df[MONTH_COLUMNS].max().max(), df["AverageScore"].max())
+    
+    # Create rating filter steps (0-10 in 0.5 increments)
+    rating_steps = [i * 0.5 for i in range(21)]
     dropdown_labels = MONTH_COLUMNS + ["Average"]
     value_series_map = {}
     for label in dropdown_labels:
@@ -189,40 +103,53 @@ def make_interactive_dashboard(df: pd.DataFrame, output_dir: Path = OUTPUT_DIR):
             "font": {"size": 12},
         }
 
+    # Create traces for each month/average and each rating threshold
     traces = []
-    for idx, label in enumerate(dropdown_labels):
+    trace_map = {}  # (month_idx, rating_threshold) -> trace_idx
+    
+    for month_idx, label in enumerate(dropdown_labels):
         value_series = value_series_map[label]
         hover_label = label
 
-        customdata = df[["State"]].assign(
-            SelectedValue=value_series,
-            AverageScore=df["AverageScore"],
-        ).to_numpy()
+        for rating_threshold in rating_steps:
+            # Filter points based on rating threshold
+            mask = value_series >= rating_threshold
+            
+            filtered_df = df[mask]
+            filtered_values = value_series[mask]
+            
+            customdata = filtered_df[["State"]].assign(
+                SelectedValue=filtered_values,
+                AverageScore=filtered_df["AverageScore"],
+            ).to_numpy()
 
-        traces.append(
-            go.Scattergeo(
-                lat=df["Latitude"],
-                lon=df["Longitude"],
-                mode="markers",
-                text=df["Park"],
-                marker=dict(
-                    size=8,
-                    color=value_series,
-                    coloraxis="coloraxis",
-                ),
-                customdata=customdata,
-                hovertemplate=(
-                    "<b>%{text}</b><br>State: %{customdata[0]}<br>"
-                    f"Condition ({hover_label}): %{{customdata[1]:.1f}}<br>"
-                    "Average: %{customdata[2]:.1f}<extra></extra>"
-                ),
-                visible=(idx == 0),
-                name=label,
+            trace_idx = len(traces)
+            trace_map[(month_idx, rating_threshold)] = trace_idx
+            
+            traces.append(
+                go.Scattergeo(
+                    lat=filtered_df["Latitude"],
+                    lon=filtered_df["Longitude"],
+                    mode="markers",
+                    text=filtered_df["Park"],
+                    marker=dict(
+                        size=8,
+                        color=filtered_values,
+                        coloraxis="coloraxis",
+                    ),
+                    customdata=customdata,
+                    hovertemplate=(
+                        "<b>%{text}</b><br>State: %{customdata[0]}<br>"
+                        f"Condition ({hover_label}): %{{customdata[1]:.1f}}<br>"
+                        "Average: %{customdata[2]:.1f}<extra></extra>"
+                    ),
+                    visible=(month_idx == 0 and rating_threshold == 0),
+                    name=label,
+                )
             )
-        )
 
     select_annotation = dict(
-        text="Select data",
+        text="Select month",
         showarrow=False,
         x=0,
         xanchor="left",
@@ -230,11 +157,25 @@ def make_interactive_dashboard(df: pd.DataFrame, output_dir: Path = OUTPUT_DIR):
         yanchor="top",
         font=dict(size=12),
     )
+    
+    rating_annotation = dict(
+        text="Min rating: 0.0",
+        showarrow=False,
+        x=0.18,
+        xanchor="left",
+        y=1.12,
+        yanchor="top",
+        font=dict(size=12),
+    )
 
     buttons = []
-    for idx, label in enumerate(dropdown_labels):
-        visibility = [False] * len(dropdown_labels)
-        visibility[idx] = True
+    current_month_idx = [0]  # Track current month for slider updates
+    
+    for month_idx, label in enumerate(dropdown_labels):
+        # When a month button is clicked, show that month with rating 0 (all parks)
+        visibility = [False] * len(traces)
+        visibility[trace_map[(month_idx, 0)]] = True
+        
         buttons.append(
             dict(
                 label=label,
@@ -245,8 +186,32 @@ def make_interactive_dashboard(df: pd.DataFrame, output_dir: Path = OUTPUT_DIR):
                         "title": f"US National Parks Hiking Conditions – {label}",
                         "annotations": [
                             deepcopy(select_annotation),
+                            dict(
+                                text="Min rating: 0.0",
+                                showarrow=False,
+                                x=0.18,
+                                xanchor="left",
+                                y=1.12,
+                                yanchor="top",
+                                font=dict(size=12),
+                            ),
                             make_top_annotation(top_lists[label]),
                         ],
+                        "sliders": [{
+                            "active": 0,
+                            "currentvalue": {"prefix": "Min rating: ", "visible": True},
+                            "steps": [
+                                {
+                                    "label": f"{threshold:.1f}",
+                                    "method": "update",
+                                    "args": [
+                                        {"visible": [i == trace_map[(month_idx, threshold)] for i in range(len(traces))]},
+                                        {}
+                                    ]
+                                }
+                                for threshold in rating_steps
+                            ]
+                        }]
                     },
                 ],
             )
@@ -267,11 +232,30 @@ def make_interactive_dashboard(df: pd.DataFrame, output_dir: Path = OUTPUT_DIR):
                 yanchor="top",
             )
         ],
+        sliders=[
+            dict(
+                active=0,
+                currentvalue={"prefix": "Min rating: ", "visible": True},
+                pad={"t": 50},
+                steps=[
+                    dict(
+                        label=f"{threshold:.1f}",
+                        method="update",
+                        args=[
+                            {"visible": [i == trace_map[(0, threshold)] for i in range(len(traces))]},
+                            {}
+                        ]
+                    )
+                    for threshold in rating_steps
+                ]
+            )
+        ],
         annotations=[
             deepcopy(select_annotation),
+            deepcopy(rating_annotation),
             make_top_annotation(top_lists[dropdown_labels[0]]),
         ],
-        margin=dict(l=20, r=20, t=60, b=20),
+        margin=dict(l=20, r=20, t=60, b=60),
         geo=dict(scope="usa", projection_type="albers usa"),
         coloraxis=dict(
             colorscale="Viridis",
@@ -292,30 +276,13 @@ def make_interactive_dashboard(df: pd.DataFrame, output_dir: Path = OUTPUT_DIR):
         full_html=True,
         config={"responsive": True},
     )
-    print(f"Saved interactive dashboard: {output_path}")
+    print(f"\nSaved interactive dashboard: {output_path}")
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Generate month-by-month US national parks hiking-condition heat maps."
+        description="Generate interactive US national parks hiking-condition heat map dashboard."
     )
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument(
-        "--month",
-        type=str,
-        help="Month to plot (e.g., Jan, February, apr, etc.)",
-    )
-    group.add_argument(
-        "--all",
-        action="store_true",
-        help="Generate maps for all 12 months.",
-    )
-    group.add_argument(
-        "--interactive",
-        action="store_true",
-        help="Generate a single HTML file with controls to switch between months.",
-    )
-
     parser.add_argument(
         "--csv",
         type=str,
@@ -326,7 +293,7 @@ def parse_args():
         "--outdir",
         type=str,
         default=str(OUTPUT_DIR),
-        help=f"Output directory for HTML maps (default: {OUTPUT_DIR})",
+        help=f"Output directory for HTML map (default: {OUTPUT_DIR})",
     )
 
     return parser.parse_args()
@@ -338,16 +305,7 @@ def main():
     outdir = Path(args.outdir)
 
     print_average_scores(df)
-
-    if args.interactive:
-        make_interactive_dashboard(df, output_dir=outdir)
-    elif args.all:
-        generate_all_months(df, output_dir=outdir)
-    else:
-        month_col = normalize_month_name(args.month)
-        if month_col not in MONTH_COLUMNS:
-            raise ValueError(f"Month column '{month_col}' not found in data.")
-        make_month_heatmap(df, month_col, output_dir=outdir)
+    make_interactive_dashboard(df, output_dir=outdir)
 
 
 if __name__ == "__main__":

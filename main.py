@@ -26,6 +26,7 @@ Output:
 """
 
 import argparse
+from copy import deepcopy
 from pathlib import Path
 
 import pandas as pd
@@ -54,6 +55,18 @@ def load_data(csv_path: str = CSV_PATH) -> pd.DataFrame:
     df["AverageScore"] = df[MONTH_COLUMNS].mean(axis=1)
 
     return df
+
+
+def print_average_scores(df: pd.DataFrame) -> None:
+    """Print all parks sorted by average score (descending)."""
+    sorted_df = df.sort_values("AverageScore", ascending=False, ignore_index=True)
+    print("\nAverage hiking condition scores (high → low):")
+    for idx, row in sorted_df.iterrows():
+        rank = idx + 1
+        park = row["Park"]
+        state = row["State"]
+        avg = row["AverageScore"]
+        print(f"{rank:>2}. {park} ({state}) – {avg:.2f}")
 
 
 def normalize_month_name(month: str) -> str:
@@ -144,14 +157,42 @@ def make_interactive_dashboard(df: pd.DataFrame, output_dir: Path = OUTPUT_DIR):
     overall_min = min(df[MONTH_COLUMNS].min().min(), df["AverageScore"].min())
     overall_max = max(df[MONTH_COLUMNS].max().max(), df["AverageScore"].max())
     dropdown_labels = MONTH_COLUMNS + ["Average"]
+    value_series_map = {}
+    for label in dropdown_labels:
+        if label == "Average":
+            value_series_map[label] = df["AverageScore"]
+        else:
+            value_series_map[label] = df[label]
+
+    top_lists = {}
+    for label, series in value_series_map.items():
+        top_entries = series.sort_values(ascending=False).head(10)
+        lines = [f"<b>Top 10 – {label}</b>"]
+        for idx, (park_idx, score) in enumerate(top_entries.items(), start=1):
+            park = df.at[park_idx, "Park"]
+            state = df.at[park_idx, "State"]
+            lines.append(f"{idx}. {park} ({state}) – {score:.1f}")
+        top_lists[label] = "<br>".join(lines)
+
+    def make_top_annotation(text: str) -> dict:
+        return {
+            "text": text,
+            "showarrow": False,
+            "x": 1.02,
+            "y": 0.5,
+            "xref": "paper",
+            "yref": "paper",
+            "align": "left",
+            "bgcolor": "rgba(255,255,255,0.9)",
+            "bordercolor": "#1f2328",
+            "borderwidth": 1,
+            "font": {"size": 12},
+        }
+
     traces = []
     for idx, label in enumerate(dropdown_labels):
-        if label == "Average":
-            value_series = df["AverageScore"]
-            hover_label = "Average"
-        else:
-            value_series = df[label]
-            hover_label = label
+        value_series = value_series_map[label]
+        hover_label = label
 
         customdata = df[["State"]].assign(
             SelectedValue=value_series,
@@ -180,6 +221,16 @@ def make_interactive_dashboard(df: pd.DataFrame, output_dir: Path = OUTPUT_DIR):
             )
         )
 
+    select_annotation = dict(
+        text="Select data",
+        showarrow=False,
+        x=0,
+        xanchor="left",
+        y=1.12,
+        yanchor="top",
+        font=dict(size=12),
+    )
+
     buttons = []
     for idx, label in enumerate(dropdown_labels):
         visibility = [False] * len(dropdown_labels)
@@ -190,7 +241,13 @@ def make_interactive_dashboard(df: pd.DataFrame, output_dir: Path = OUTPUT_DIR):
                 method="update",
                 args=[
                     {"visible": visibility},
-                    {"title": f"US National Parks Hiking Conditions – {label}"},
+                    {
+                        "title": f"US National Parks Hiking Conditions – {label}",
+                        "annotations": [
+                            deepcopy(select_annotation),
+                            make_top_annotation(top_lists[label]),
+                        ],
+                    },
                 ],
             )
         )
@@ -211,15 +268,8 @@ def make_interactive_dashboard(df: pd.DataFrame, output_dir: Path = OUTPUT_DIR):
             )
         ],
         annotations=[
-            dict(
-                text="Select data",
-                showarrow=False,
-                x=0,
-                xanchor="left",
-                y=1.12,
-                yanchor="top",
-                font=dict(size=12),
-            )
+            deepcopy(select_annotation),
+            make_top_annotation(top_lists[dropdown_labels[0]]),
         ],
         margin=dict(l=20, r=20, t=60, b=20),
         geo=dict(scope="usa", projection_type="albers usa"),
@@ -286,6 +336,8 @@ def main():
     args = parse_args()
     df = load_data(args.csv)
     outdir = Path(args.outdir)
+
+    print_average_scores(df)
 
     if args.interactive:
         make_interactive_dashboard(df, output_dir=outdir)

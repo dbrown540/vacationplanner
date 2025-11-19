@@ -166,8 +166,8 @@ def make_interactive_dashboard(df: pd.DataFrame, output_dir: Path = OUTPUT_DIR):
 
     top_lists = {}
     for label, series in value_series_map.items():
-        top_entries = series.sort_values(ascending=False).head(10)
-        lines = [f"<b>Top 10 – {label}</b>"]
+        top_entries = series.sort_values(ascending=False).head(15)
+        lines = [f"<b>Top 15 – {label}</b>"]
         for idx, (park_idx, score) in enumerate(top_entries.items(), start=1):
             park = df.at[park_idx, "Park"]
             state = df.at[park_idx, "State"]

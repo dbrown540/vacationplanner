@@ -31,7 +31,7 @@ jobs:
 
       - name: Generate interactive dashboard
         run: |
-          python main.py --interactive --outdir docs
+          python main.py --outdir docs
           mv docs/hiking_conditions_interactive.html docs/index.html
 
       - name: Upload artifact

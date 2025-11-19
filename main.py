@@ -167,11 +167,7 @@ def make_interactive_dashboard(df: pd.DataFrame, output_dir: Path = OUTPUT_DIR):
                 marker=dict(
                     size=8,
                     color=value_series,
-                    colorscale="Viridis",
-                    cmin=overall_min,
-                    cmax=overall_max,
-                    colorbar=dict(title="Condition", ticks="outside"),
-                    showscale=(idx == 0),
+                    coloraxis="coloraxis",
                 ),
                 customdata=customdata,
                 hovertemplate=(
@@ -227,6 +223,17 @@ def make_interactive_dashboard(df: pd.DataFrame, output_dir: Path = OUTPUT_DIR):
         ],
         margin=dict(l=20, r=20, t=60, b=20),
         geo=dict(scope="usa", projection_type="albers usa"),
+        coloraxis=dict(
+            colorscale="Viridis",
+            cmin=overall_min,
+            cmax=overall_max,
+            colorbar=dict(
+                title="Hiking condition score",
+                ticks="outside",
+                len=0.75,
+                thickness=16,
+            ),
+        ),
     )
 
     fig.write_html(

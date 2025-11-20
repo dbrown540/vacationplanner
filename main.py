@@ -151,25 +151,14 @@ def make_interactive_dashboard(df: pd.DataFrame, output_dir: Path = OUTPUT_DIR):
     select_annotation = dict(
         text="Select month",
         showarrow=False,
-        x=0,
+        x=0.005,
         xanchor="left",
-        y=1.12,
+        y=1.04,
         yanchor="top",
         font=dict(size=12),
     )
     
-    rating_annotation = dict(
-        text="Min rating: 0.0",
-        showarrow=False,
-        x=0.18,
-        xanchor="left",
-        y=1.12,
-        yanchor="top",
-        font=dict(size=12),
-    )
-
     buttons = []
-    current_month_idx = [0]  # Track current month for slider updates
     
     for month_idx, label in enumerate(dropdown_labels):
         # When a month button is clicked, show that month with rating 0 (all parks)
@@ -186,15 +175,6 @@ def make_interactive_dashboard(df: pd.DataFrame, output_dir: Path = OUTPUT_DIR):
                         "title": f"US National Parks Hiking Conditions – {label}",
                         "annotations": [
                             deepcopy(select_annotation),
-                            dict(
-                                text="Min rating: 0.0",
-                                showarrow=False,
-                                x=0.18,
-                                xanchor="left",
-                                y=1.12,
-                                yanchor="top",
-                                font=dict(size=12),
-                            ),
                             make_top_annotation(top_lists[label]),
                         ],
                         "sliders": [{
@@ -226,9 +206,9 @@ def make_interactive_dashboard(df: pd.DataFrame, output_dir: Path = OUTPUT_DIR):
                 buttons=buttons,
                 direction="down",
                 showactive=True,
-                x=0.01,
+                x=0,
                 xanchor="left",
-                y=1.1,
+                y=1,
                 yanchor="top",
             )
         ],
@@ -252,7 +232,6 @@ def make_interactive_dashboard(df: pd.DataFrame, output_dir: Path = OUTPUT_DIR):
         ],
         annotations=[
             deepcopy(select_annotation),
-            deepcopy(rating_annotation),
             make_top_annotation(top_lists[dropdown_labels[0]]),
         ],
         margin=dict(l=20, r=20, t=60, b=60),
